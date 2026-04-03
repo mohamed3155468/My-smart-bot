@@ -1,10 +1,9 @@
 import time
-import os
 from threading import Thread
 from flask import Flask
 from whatsapp_api_client_python import API
 
-# --- إعداد السيرفر الوهمي (Flask) لضمان استمرار العمل على Replit ---
+# --- 1. إعداد السيرفر الوهمي (Flask) ---
 app = Flask('')
 
 @app.route('/')
@@ -12,18 +11,17 @@ def home():
     return "✅ Bot is Running 24/7!"
 
 def run_web_server():
-    # ريبلت بيحتاج بورت 8080 عشان الـ Deployment ينجح
+    # بورت 8080 هو المفضل لـ Replit Deployment
     app.run(host='0.0.0.0', port=8080)
 
-# --- بيانات الاعتماد الخاصة بك ---
+# --- 2. بيانات الاعتماد ---
 ID_INSTANCE = "7107571550" 
-API_TOKEN_INSTANCE = "57cd9401766049c895941419144969012d6be4687d4241deae"
+API_TOKEN_INSTANCE = "b65d1e96662e4f9db5f2df1d58faf2e67848787ccb924aa1b0"
 
-# ربط المكتبة بالسيرفر
 greenAPI = API.GreenApi(ID_INSTANCE, API_TOKEN_INSTANCE)
 welcomed_users = set()
 
-# --- القاموس الخاص بالردود المزخرفة (بدون أي تغيير) ---
+# --- 3. القاموس الخاص بالردود المزخرفة (كما هي بدون تغيير) ---
 RESOURCES = {
     "1": (
         "🏗️ *┃ مـحـطـة الـتـأسـيـس والـبـنـاء* ┃\n"
@@ -81,53 +79,55 @@ BUSY_MSG = (
     "💡 يمكنك الاستمرار في استخدام القائمة أو انتظار الرد."
 )
 
+# --- 4. محرك البوت الأساسي ---
 def start_bot():
-    print("🚀 [System] البوت بدأ العمل ومراقب جيداً للرسائل بالزخارف الكاملة...")
+    print("🚀 [System] البوت بدأ العمل بمراقبة الرسائل...")
     
     while True:
         try:
-            # استلام الإشعارات من السيرفر
-            receive_dict = greenAPI.receiveNotification()
-            if receive_dict and receive_dict.value:
-                payload = receive_dict.value
+            # استخدام .receiving. لمواكبة تحديث المكتبة الجديد
+            receive_dict = greenAPI.receiving.receiveNotification()
+            
+            if receive_dict and receive_dict.data:
+                payload = receive_dict.data
                 type_webhook = payload.get('typeWebhook')
+                receipt_id = payload.get('receiptId')
                 
-                print(f"📡 إشعار جديد وصل: {type_webhook}")
-
                 if type_webhook == 'incomingMessageReceived':
-                    chat_id = payload['senderData']['chatId']
-                    user_msg = ""
+                    chat_id = payload.get('senderData', {}).get('chatId')
                     msg_data = payload.get('messageData', {})
+                    user_msg = ""
                     
+                    # استخراج النص سواء كان رسالة عادية أو ممتدة
                     if msg_data.get('typeMessage') == 'textMessage':
-                        user_msg = msg_data.get('textMessageData', {}).get('text', '').strip()
+                        user_msg = msg_data.get('textMessageData', {}).get('textMessage', '').strip()
                     elif msg_data.get('typeMessage') == 'extendedTextMessage':
-                        user_msg = msg_data.get('extendedTextMessageData', {}).get('text', '').strip()
+                        user_msg = msg_data.get('extendedTextMessageData', {}).get('textMessage', '').strip()
                     
-                    print(f"💬 رسالة من {chat_id}: {user_msg}")
+                    if user_msg:
+                        print(f"💬 رسالة من {chat_id}: {user_msg}")
 
-                    # معالجة الردود
-                    if user_msg in RESOURCES:
-                        reply = RESOURCES[user_msg]
-                    elif chat_id not in welcomed_users:
-                        reply = WELCOME_MSG
-                        welcomed_users.add(chat_id)
-                    else:
-                        reply = BUSY_MSG
+                        # منطق الردود
+                        if user_msg in RESOURCES:
+                            reply = RESOURCES[user_msg]
+                        elif chat_id not in welcomed_users:
+                            reply = WELCOME_MSG
+                            welcomed_users.add(chat_id)
+                        else:
+                            reply = BUSY_MSG
 
-                    greenAPI.sending.sendMessage(chat_id, reply)
-                    print(f"✅ تم الرد بنجاح على {chat_id}")
+                        greenAPI.sending.sendMessage(chat_id, reply)
+                        print(f"✅ تم الرد على {chat_id}")
 
-                greenAPI.deleteNotification(payload['receiptId'])
+                # مسح الإشعار بعد المعالجة
+                greenAPI.receiving.deleteNotification(receipt_id)
         
         except Exception as e:
-            print(f"⚠️ خطأ أثناء التشغيل: {e}")
+            print(f"⚠️ تنبيه: {e}")
             time.sleep(2)
 
 if __name__ == '__main__':
-    # 1. تشغيل السيرفر الوهمي في خيط (Thread) منفصل
-    server_thread = Thread(target=run_web_server)
-    server_thread.start()
-    
-    # 2. تشغيل محرك البوت الأساسي
+    # تشغيل السيرفر في الخلفية
+    Thread(target=run_web_server).start()
+    # تشغيل البوت
     start_bot()
