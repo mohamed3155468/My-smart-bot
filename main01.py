@@ -16,7 +16,7 @@ def run_web_server():
 
 # --- 2. بيانات الاعتماد ---
 ID_INSTANCE = "7107571550" 
-API_TOKEN_INSTANCE = "b65d1e96662e4f9db5f2df1d58faf2e67848787ccb924aa1b0"
+API_TOKEN_INSTANCE = "57cd9401766049c895941419144969012d6be4687d4241deae"
 
 greenAPI = API.GreenApi(ID_INSTANCE, API_TOKEN_INSTANCE)
 welcomed_users = set()
