@@ -1,101 +1,133 @@
-from whatsapp_api_client_python import API
 import time
+import os
+from threading import Thread
+from flask import Flask
+from whatsapp_api_client_python import API
 
-# بياناتك الخاصة من Green-API
-ID_INSTANCE = '7107571550'
-API_TOKEN_INSTANCE = '57cd9401766049c895941419144969012d6be4687d4241deae'
+# --- إعداد السيرفر الوهمي (Flask) لضمان استمرار العمل على Replit ---
+app = Flask('')
 
+@app.route('/')
+def home():
+    return "✅ Bot is Running 24/7!"
+
+def run_web_server():
+    # ريبلت بيحتاج بورت 8080 عشان الـ Deployment ينجح
+    app.run(host='0.0.0.0', port=8080)
+
+# --- بيانات الاعتماد الخاصة بك ---
+ID_INSTANCE = "7107571550" 
+API_TOKEN_INSTANCE = "b65d1e96662e4f9db5f2df1d58faf2e67848787ccb924aa1b0"
+
+# ربط المكتبة بالسيرفر
 greenAPI = API.GreenApi(ID_INSTANCE, API_TOKEN_INSTANCE)
+welcomed_users = set()
 
-# قاموس لحفظ وقت آخر رسالة ترحيب لكل مستخدم (بالثواني)
-user_sessions = {}
+# --- القاموس الخاص بالردود المزخرفة (بدون أي تغيير) ---
+RESOURCES = {
+    "1": (
+        "🏗️ *┃ مـحـطـة الـتـأسـيـس والـبـنـاء* ┃\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "💡 *خلف الكواليس:*\n"
+        "تم تطوير هذا النظام ليكون رفيقك الذكي، حيث يعتمد كلياً على لغة *Python* القوية مع تكامل متطور لخدمات الـ *Cloud APIs*.\n\n"
+        "🛡️ *الهدف الرئيسي:*\n"
+        "خلق تجربة تواصل فريدة وسريعة تلبي احتياجاتك في أجزاء من الثانية.\n\n"
+        "✨ _شكرًا لاهتمامك بمعرفة البدايات!_"
+    ),
+    "2": (
+        "⚡ *┃ الـتـرسـانـة الـتـقـنـيـة* ┃\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "🖥️ *Environment:* Android Termux\n"
+        "🐍 *Engine:* Python 3.10+\n"
+        "🌐 *Protocol:* Green-API Gateway\n"
+        "⚙️ *الحالة:* جميع الأنظمة تعمل بكفاءة *100%*."
+    ),
+    "3": (
+        "🚀 *┃ رُؤيـة الـمُـسـتـقـبـل* ┃\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "تطلعاتنا لا تتوقف عند هذا الحد، نحن نعمل الآن على:\n\n"
+        "🧠 دمج الـ *AI* (الذكاء الاصطناعي) للرد الذكي.\n"
+        "📊 نظام تحليل بيانات الرسائل والردود.\n\n"
+        "📈 *ترقبوا التحديثات القادمة!*"
+    ),
+    "4": (
+        "📩 *┃ بـوابـة الـتـواصـل الـمُـبـاشـر* ┃\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "لقد وصلت إلى قسم الرسائل الخاصة بـ *محمد*.\n\n"
+        "⏳ *حالة محمد الآن:* في وضع التطوير والإبداع 👨‍💻🔥\n\n"
+        "✉️ *اترك رسالتك الآن* بكل وضوح، وسيتم تنبيه محمد فوراً للرد عليك بمجرد تفرغه.\n\n"
+        "✨ _نحن نقدر وقتك جداً!_"
+    )
+}
 
-def main():
-    print("🚀 فضاء محمد البرمجي يعمل الآن بنظام الذاكرة السحابية...")
+WELCOME_MSG = (
+    "👋 *أهلاً بك في فضاء محمد البرمجي* ✨\n"
+    "━━━━━━━━━━━━━━━\n\n"
+    "أنا مساعدك الآلي المتطور 🤖، يسعدني جداً اهتمامك بالتواصل معنا.\n\n"
+    "للحصول على أفضل تجربة، اختر وجهتك من القائمة:\n\n"
+    "1️⃣ ↫ 🏗️ *قـصـة الـتـأسـيـس*\n"
+    "2️⃣ ↫ ⚡ *الـعـتـاد والـتـقـنـيـة*\n"
+    "3️⃣ ↫ 🚀 *رؤيـة الـتـطـويـر*\n"
+    "4️⃣ ↫ 📞 *تـواصـل مـبـاشـر*\n\n"
+    "━━━━━━━━━━━━━━━\n"
+    "⌨️ *فقط أرسل رقم القسم المراد استكشافه*"
+)
+
+BUSY_MSG = (
+    "⌛ *نحن نقوم بمعالجة طلبك..*\n"
+    "━━━━━━━━━━━━━━━\n"
+    "عذراً، يبدو أن محمد مشغول حالياً 👨‍💻.\n\n"
+    "✅ تم استلام رسالتك بنجاح.\n"
+    "💡 يمكنك الاستمرار في استخدام القائمة أو انتظار الرد."
+)
+
+def start_bot():
+    print("🚀 [System] البوت بدأ العمل ومراقب جيداً للرسائل بالزخارف الكاملة...")
     
     while True:
         try:
-            notifications = greenAPI.receiving.receiveNotification()
-            if notifications.data:
-                res = notifications.data
-                receipt_id = res.get('receiptId')
-                body = res.get('body', {})
+            # استلام الإشعارات من السيرفر
+            receive_dict = greenAPI.receiveNotification()
+            if receive_dict and receive_dict.value:
+                payload = receive_dict.value
+                type_webhook = payload.get('typeWebhook')
                 
-                if body.get('typeWebhook') == 'incomingMessageReceived':
-                    chat_id = body.get('senderData', {}).get('chatId')
-                    message_data = body.get('messageData', {})
+                print(f"📡 إشعار جديد وصل: {type_webhook}")
+
+                if type_webhook == 'incomingMessageReceived':
+                    chat_id = payload['senderData']['chatId']
+                    user_msg = ""
+                    msg_data = payload.get('messageData', {})
                     
-                    if 'textMessageData' in message_data:
-                        user_text = message_data['textMessageData'].get('textMessage', '').strip()
-                        current_time = time.time()
+                    if msg_data.get('typeMessage') == 'textMessage':
+                        user_msg = msg_data.get('textMessageData', {}).get('text', '').strip()
+                    elif msg_data.get('typeMessage') == 'extendedTextMessage':
+                        user_msg = msg_data.get('extendedTextMessageData', {}).get('text', '').strip()
+                    
+                    print(f"💬 رسالة من {chat_id}: {user_msg}")
 
-                        # --- النصوص الكاملة كما طلبتها ---
-                        welcome_msg = (
-                            "👋 أهلاً بك في فضاء محمد البرمجي ✨\n"
-                            "━━━━━━━━━━━━━━━\n"
-                            "أنا مساعدك الآلي المتطور 🤖.\n"
-                            "اختر وجهتك:\n"
-                            "1️⃣ ↫ 🏗️ قـصـة الـتـأسـيـس\n"
-                            "2️⃣ ↫ ⚡ الـعـتـاد والـتـقـنـيـة\n"
-                            "3️⃣ ↫ 🚀 رؤيـة الـتـطـويـر\n"
-                            "4️⃣ ↫ 📞 تـواصـل مـبـاشـر\n"
-                            "━━━━━━━━━━━━━━━\n"
-                            "⌨️ فقط أرسل رقم القسم المراد استكشافه"
-                        )
+                    # معالجة الردود
+                    if user_msg in RESOURCES:
+                        reply = RESOURCES[user_msg]
+                    elif chat_id not in welcomed_users:
+                        reply = WELCOME_MSG
+                        welcomed_users.add(chat_id)
+                    else:
+                        reply = BUSY_MSG
 
-                        alert_msg = (
-                            "🛡️ ┃ تـنـبـيـه نـظـام الـمُـبـرمـج ┃\n"
-                            "━━━━━━━━━━━━━━━\n"
-                            "✅ تـم اسـتـلام رسـالـتـك بـنـجـاح\n"
-                            "💬 وصلت كلماتك الآن إلى مبرمجي الشخصي، وهو يعمل حالياً في بيئة التطوير 👨‍💻🔥.\n"
-                            "⏳ سـيـتـم الـرد عـلـيـك: في أقرب وقت ممكن بمجرد التفرغ.\n"
-                            "━━━━━━━━━━━━━━━\n"
-                            "✨ شكرًا لانتظارك وتفهمك!\n"
-                            "✨ان لم يتم الرد عليك في أقرب وقت\n"
-                            "✨أو كنت في استعجال يمكنك مراسلت مبمرجي\n"
-                            "✨في تليجرام ابحث عن\n"
-                            " @MOHAMED4358bot✨\n"
-                            "✨وابدا بالمراسله"
-                        )
+                    greenAPI.sending.sendMessage(chat_id, reply)
+                    print(f"✅ تم الرد بنجاح على {chat_id}")
 
-                        # --- منطق الردود المطور ---
-                        
-                        # الحصول على وقت آخر ترحيب لهذا المستخدم (0 إذا كان أول مرة)
-                        last_welcome_time = user_sessions.get(chat_id, 0)
-
-                        # الحالة 1: إرسال رسالة الترحيب لأول مرة أو بعد مرور 30 دقيقة
-                        if current_time - last_welcome_time > 1800: # 1800 ثانية = 30 دقيقة
-                            greenAPI.sending.sendMessage(chat_id, welcome_msg)
-                            user_sessions[chat_id] = current_time
-                            
-                            # إذا كانت أول رسالة "رقم"، نكمل لنرسل له القسم أيضاً
-                            # إذا لم تكن "رقم"، نكتفي بالترحيب ونحذف الإشعار
-                            if user_text not in ["1", "2", "3", "4"]:
-                                greenAPI.receiving.deleteNotification(receipt_id)
-                                continue
-
-                        # الحالة 2: الرد على الأوامر (1، 2، 3، 4)
-                        if user_text == "1":
-                            response = "🏗️ ┃ مـحـطـة الـتـأسـيـس والـبـنـاء ┃\n━━━━━━━━━━━━━━━\n💡 خلف الكواليس: تم تطوير هذا النظام ليكون رفيقك الذكي، يعتمد كلياً على لغة Python.\n✨ شكرًا لاهتمامك بمعرفة البدايات!"
-                        elif user_text == "2":
-                            response = "⚡ ┃ الـتـرسـانـة الـتـقـنـيـة ┃\n━━━━━━━━━━━━━━━\n🖥️ Environment: Android Termux\n🐍 Engine: Python 3.x\n⚙️ الحالة: جميع الأنظمة تعمل بكفاءة 100%."
-                        elif user_text == "3":
-                            response = "🚀 ┃ رُؤيـة الـمُـسـتـقـبـل ┃\n━━━━━━━━━━━━━━━\n🧠 دمج الـ AI للرد الذكي قريباً.\n📈 ترقبوا التحديثات القادمة!"
-                        elif user_text == "4":
-                            response = "📩 ┃ بـوابـة الـتـواصـل الـمُـبـاشـر ┃\n━━━━━━━━━━━━━━━\n⏳ حالة محمد الآن: في وضع التطوير والإبداع 👨‍💻🔥\n✉️ اترك رسالتك الآن، وسيتم الرد عليك فور تفرغه."
-                        else:
-                            # الحالة 3: أي رسالة أخرى غير الأوامر (بعد إرسال الترحيب فعلياً)
-                            response = alert_msg
-
-                        greenAPI.sending.sendMessage(chat_id, response)
-                
-                # مسح الإشعار من السيرفر
-                greenAPI.receiving.deleteNotification(receipt_id)
-            
-            time.sleep(1)
+                greenAPI.deleteNotification(payload['receiptId'])
+        
         except Exception as e:
-            print(f"حدث خطأ: {e}")
-            time.sleep(5)
+            print(f"⚠️ خطأ أثناء التشغيل: {e}")
+            time.sleep(2)
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    # 1. تشغيل السيرفر الوهمي في خيط (Thread) منفصل
+    server_thread = Thread(target=run_web_server)
+    server_thread.start()
+    
+    # 2. تشغيل محرك البوت الأساسي
+    start_bot()
